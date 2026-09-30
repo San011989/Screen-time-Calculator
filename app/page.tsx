@@ -1,69 +1,264 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import type { ChangeEvent } from "react";
+
+type Key = "social" | "video" | "games" | "study";
+
+type Category = { key: Key; label: string; color: string };
+
+type Results =
+  | { empty: true }
+  | { empty: false; hours: number; minutes: number; mostUsedApp: string };
+
+// Requirement 1: the four app categories
+const CATEGORIES: Category[] = [
+  { key: "social", label: "Social media", color: "var(--social)" },
+  { key: "video", label: "Video apps", color: "var(--video)" },
+  { key: "games", label: "Games", color: "var(--games)" },
+  { key: "study", label: "Study apps", color: "var(--study)" },
+];
+
+const STEP = 5;
+const SLIDER_MAX = 480; // 8 hours; typing in the box can go higher
+
+const toMinutes = (value: string): number => {
+  const n = Math.floor(Number(value));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
 
 export default function Home() {
+  const [inputs, setInputs] = useState<Record<Key, string>>({
+    social: "",
+    video: "",
+    games: "",
+    study: "",
+  });
+  const [results, setResults] = useState<Results | null>(null);
+
+  // Hint 2: dictionary of category name -> minutes
+  const appTimes: Record<string, number> = Object.fromEntries(
+    CATEGORIES.map((c) => [c.label, toMinutes(inputs[c.key])])
+  );
+
+  // Live total, only for the preview bar while the user types
+  const liveTotal = Object.values(appTimes).reduce((a, b) => a + b, 0);
+  const liveHours = Math.floor(liveTotal / 60);
+  const liveMins = liveTotal % 60;
+
+  const update = (key: Key, value: string) => {
+    setInputs((prev) => ({ ...prev, [key]: value }));
+    setResults(null); // results go stale once an input changes
+  };
+
+  const nudge = (key: Key, delta: number) => {
+    update(key, String(Math.max(0, toMinutes(inputs[key]) + delta)));
+  };
+
+  // Requirements 2 to 5, run when the button is clicked
+  const calculate = () => {
+    // Hint 3: sum of all minutes
+    const totalMinutes = Object.values(appTimes).reduce((a, b) => a + b, 0);
+
+    // Requirement 5 / Hint 6: nothing entered
+    if (totalMinutes === 0) {
+      setResults({ empty: true });
+      return;
+    }
+
+    // Hint 4: category with the most minutes
+    const mostUsedApp = Object.keys(appTimes).reduce((best, name) =>
+      appTimes[name] > appTimes[best] ? name : best
+    );
+
+    // Hint 5: hours and minutes
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    setResults({ empty: false, hours, minutes, mostUsedApp });
+  };
+
+  const reset = () => {
+    setInputs({ social: "", video: "", games: "", study: "" });
+    setResults(null);
+  };
+
+  const mostUsedColor =
+    results && !results.empty
+      ? CATEGORIES.find((c) => c.label === results.mostUsedApp)?.color
+      : undefined;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <main className="page">
+      <header className="head">
+        <h1>Screen Time Calculator</h1>
+        <p>Enter how many minutes you spent on each app today.</p>
+      </header>
+
+      <div className="layout">
+        {/* ---------- Inputs ---------- */}
+        <section className="panel" aria-label="Minutes per app category">
+          <ul className="fields">
+            {CATEGORIES.map((c) => {
+              const minutes = appTimes[c.label];
+              return (
+                <li className="field" key={c.key}>
+                  <label htmlFor={c.key}>
+                    <span className="dot" style={{ background: c.color }} />
+                    {c.label} (minutes)
+                  </label>
+
+                  <div className="stepper">
+                    <button
+                      type="button"
+                      onClick={() => nudge(c.key, -STEP)}
+                      aria-label={`Remove ${STEP} minutes from ${c.label}`}
+                    >
+                      −
+                    </button>
+                    <input
+                      id={c.key}
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step={STEP}
+                      placeholder="0"
+                      value={inputs[c.key]}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                        update(c.key, e.target.value)
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() => nudge(c.key, STEP)}
+                      aria-label={`Add ${STEP} minutes to ${c.label}`}
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <input
+                    className="slider"
+                    type="range"
+                    min={0}
+                    max={SLIDER_MAX}
+                    step={STEP}
+                    value={Math.min(minutes, SLIDER_MAX)}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      update(c.key, e.target.value)
+                    }
+                    style={{ accentColor: c.color }}
+                    aria-label={`${c.label} slider`}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="actions">
+            <button type="button" className="primary" onClick={calculate}>
+              Calculate screen time
+            </button>
+            <button type="button" className="ghost" onClick={reset}>
+              Clear all
+            </button>
+          </div>
+        </section>
+
+        {/* ---------- Live bar + results ---------- */}
+        <aside className="panel side" aria-live="polite">
+          <div className="live-head">
+            <h2>Your day so far</h2>
+            <span className="live-total">
+              {liveHours}h {liveMins}m
+            </span>
+          </div>
+
+          <div
+            className="bar"
+            role="img"
+            aria-label={
+              liveTotal === 0
+                ? "No minutes entered yet"
+                : CATEGORIES.map(
+                    (c) => `${c.label}: ${appTimes[c.label]} minutes`
+                  ).join(", ")
+            }
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            {CATEGORIES.map((c) => (
+              <span
+                key={c.key}
+                className="seg"
+                style={{
+                  width: liveTotal
+                    ? `${(appTimes[c.label] / liveTotal) * 100}%`
+                    : "0%",
+                  background: c.color,
+                }}
+              />
+            ))}
+          </div>
+
+          <ul className="legend">
+            {CATEGORIES.map((c) => {
+              const pct = liveTotal
+                ? Math.round((appTimes[c.label] / liveTotal) * 100)
+                : 0;
+              return (
+                <li key={c.key}>
+                  <span className="dot" style={{ background: c.color }} />
+                  <span className="name">{c.label}</span>
+                  <span className="num">
+                    {appTimes[c.label]} min · {pct}%
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+
+          <h2 className="results-title">Your results</h2>
+
+          {results === null && (
+            <p className="hint">
+              Select “Calculate screen time” to see your totals.
+            </p>
+          )}
+
+          {results?.empty && (
+            <div className="notice info" role="status">
+              <span className="icon" aria-hidden="true">
+                i
+              </span>
+              Enter some screen time to see your most-used app.
+            </div>
+          )}
+
+          {results && !results.empty && (
+            <div
+              className="notice success"
+              role="status"
+              key={`${results.hours}-${results.minutes}-${results.mostUsedApp}`}
+            >
+              <p className="big">
+                {results.hours}
+                <small>hr</small> {results.minutes}
+                <small>min</small>
+              </p>
+              <p>
+                <strong>Total screen time:</strong> {results.hours} hour(s) and{" "}
+                {results.minutes} minute(s)
+              </p>
+              <p>
+                <strong>Most-used app category:</strong>{" "}
+                <span className="chip">
+                  <span className="dot" style={{ background: mostUsedColor }} />
+                  {results.mostUsedApp}
+                </span>
+              </p>
+            </div>
+          )}
+        </aside>
+      </div>
+    </main>
   );
 }
